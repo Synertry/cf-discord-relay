@@ -59,16 +59,16 @@ Verify with `curl https://<your-domain>/healthcheck`. It returns 200 JSON with b
 Take your existing Discord webhook URL, swap the host for the relay's, and send the relay's secret as `x-auth-key`. Store the secret in Script Properties, never in source.
 
 ```javascript
-var POST_URL = "https://<your-domain>/webhooks/<webhook_id>/<webhook_token>";
+const WEBHOOK_URL = "https://<your-domain>/webhooks/<webhook_id>/<webhook_token>";
 
 function onSubmit(e) {
     // Store the relay's shared secret (same value as the Worker AUTH_KEY)
     // under Project Settings -> Script Properties.
-    var AUTH_KEY = PropertiesService.getScriptProperties().getProperty("AUTH_KEY");
+    const AUTH_KEY = PropertiesService.getScriptProperties().getProperty("AUTH_KEY");
 
     // ... build your embed payload from the form response here ...
 
-    UrlFetchApp.fetch(POST_URL, {
+    UrlFetchApp.fetch(WEBHOOK_URL, {
         method: "post",
         contentType: "application/json",
         muteHttpExceptions: true,

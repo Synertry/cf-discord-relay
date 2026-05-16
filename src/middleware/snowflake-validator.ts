@@ -75,10 +75,14 @@ export const snowflakeValidatorMiddleware = createMiddleware(async (c, next) => 
 	const segments = c.req.path.split('/').filter(Boolean);
 
 	for (let i = 0; i < segments.length - 1; i++) {
-		const resource = segments[i].toLowerCase();
-		if (SNOWFLAKE_RESOURCES.has(resource)) {
-			const id = segments[i + 1];
+		const rawResource = segments[i];
+		const id = segments[i + 1];
+		// Loop bound guarantees both are defined; explicit guard keeps the
+		// invariant intact if the bound is ever refactored.
+		if (rawResource === undefined || id === undefined) continue;
 
+		const resource = rawResource.toLowerCase();
+		if (SNOWFLAKE_RESOURCES.has(resource)) {
 			// Skip validation for virtual IDs that map to real Discord
 			// endpoints (e.g. /users/@me, /messages/bulk-delete). See
 			// VIRTUAL_IDS above for the documented list.

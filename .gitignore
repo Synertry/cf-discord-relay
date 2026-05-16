@@ -1,0 +1,45 @@
+# wrangler / Cloudflare Workers
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
+.wrangler/
+
+# Auto-generated Cloudflare Workers type definitions (regenerated via `bun run cf-typegen`)
+worker-configuration.d.ts
+
+# Dependencies
+node_modules/
+
+# Use bun.lock; ignore other package-manager lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Test coverage
+coverage
+*.lcov
+.nyc_output
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local artifacts
+output/
+dist/

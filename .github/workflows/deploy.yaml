@@ -1,0 +1,184 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches:
+      - production
+
+# Serialize production deploys. Two rapid pushes to `production` (e.g. a
+# Dependabot bump landing on top of a feature merge) would otherwise race
+# through `wrangler versions upload` / `versions deploy` concurrently and
+# the latter call could promote an older version than the latest push.
+# `cancel-in-progress: false` keeps both in the queue rather than aborting
+# a half-uploaded version, which is safer for Cloudflare API state.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    timeout-minutes: 10
+    # Expose deploy metadata to the downstream notify job. Outputs are set as
+    # soon as their value is known, so even a mid-pipeline failure (upload,
+    # version-list, or promote step) still surfaces whatever was already
+    # computed - the notify job degrades gracefully when fields are empty.
+    outputs:
+      short_sha: ${{ steps.deploy.outputs.short_sha }}
+      deploy_msg: ${{ steps.deploy.outputs.deploy_msg }}
+      version_id: ${{ steps.deploy.outputs.version_id }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: '22'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: latest
+
+      - name: Restore bun cache and node_modules
+        id: cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: |
+            ~/.cache/bun
+            node_modules
+          key: cache-${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        timeout-minutes: 3
+        run: bun install
+
+      - name: Save bun cache and node_modules
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5.0.5
+        with:
+          path: |
+            ~/.cache/bun
+            node_modules
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Generate Cloudflare Worker types
+        run: node ./node_modules/wrangler/bin/wrangler.js types --env-interface CloudflareBindings
+
+      - name: Inject custom domain
+        run: |
+          if [ -z "${{ secrets.CUSTOM_DOMAIN }}" ]; then
+            echo "::error::CUSTOM_DOMAIN secret is not set"
+            exit 1
+          fi
+
+          sed -i \
+            -e "s/__CUSTOM_DOMAIN__/${{ secrets.CUSTOM_DOMAIN }}/g" \
+            wrangler.jsonc
+
+      - name: Set Build Metadata
+        run: |
+          # Normalize the commit timestamp to UTC ISO-8601 with `Z` suffix so
+          # the /healthcheck `build.timestamp` matches the format of `time`
+          # (instead of leaking the committer's local TZ offset).
+          BUILD_TS_UTC=$(date -u -d "${{ github.event.head_commit.timestamp }}" +%Y-%m-%dT%H:%M:%SZ)
+          sed -i \
+            -e "s/__BUILD_HASH__/${{ github.sha }}/g" \
+            -e "s|__BUILD_TIMESTAMP__|$BUILD_TS_UTC|g" \
+            wrangler.jsonc
+
+      - name: Deploy to Cloudflare
+        id: deploy
+        timeout-minutes: 5
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -e
+          set -o pipefail
+
+          # --- 1. PREPARE METADATA ---
+          # Get Short SHA (First 8 chars)
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-8)
+
+          # Try to get the Git Commit Title (Subject only)
+          # We use || true to prevent crash if git fails
+          COMMIT_TITLE=$(git log -1 --format=%s 2>/dev/null || echo "")
+
+          # Fallback if empty (e.g. manual trigger or no checkout)
+          if [ -z "$COMMIT_TITLE" ]; then
+            COMMIT_TITLE="Manual Deploy"
+          fi
+
+          # Sanitize: Remove quotes and backticks to prevent syntax errors
+          SAFE_TITLE=$(echo "$COMMIT_TITLE" | sed "s/[\"'\`]//g")
+
+          # Truncate to 50 chars (Max Limit)
+          # We use Bash native substring ${var:offset:length} which handles UTF-8 better than cut
+          DEPLOY_MSG="${SAFE_TITLE:0:50}"
+
+          # Emit metadata outputs IMMEDIATELY so the notify job has them even
+          # if upload/list/promote below fails. (Job outputs only flush on
+          # successful step completion, but a failing step still flushes any
+          # writes made before its non-zero exit.)
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "deploy_msg=$DEPLOY_MSG" >> "$GITHUB_OUTPUT"
+
+          echo "📝 Message: $DEPLOY_MSG"
+          echo "🔖 Tag: $SHORT_SHA"
+
+          # --- 2. UPLOAD ---
+          # Wrangler's bin/wrangler.js entry spawns a child via process.execPath
+          # with node-only flags (--no-warnings, --experimental-vm-modules), so
+          # running it under `bun --bun` silently breaks `versions upload` (the
+          # banner prints, no upload happens, exit 0). Use real Node from
+          # setup-node above to keep the spawn chain Node-flavored throughout.
+          echo "🚀 Uploading..."
+          node ./node_modules/wrangler/bin/wrangler.js versions upload \
+            --message "$DEPLOY_MSG" \
+            --tag "$SHORT_SHA"
+
+          # --- 3. RETRIEVE ID ---
+          echo "🔍 verifying upload..."
+          # Filter specifically by our tag
+          VERSION_ID=$(node ./node_modules/wrangler/bin/wrangler.js versions list --json | jq -r --arg tag "$SHORT_SHA" '.[] | select(.annotations["workers/tag"] == $tag) | .id')
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" == "null" ]; then
+            echo "::error::Version ID not found for tag $SHORT_SHA"
+            exit 1
+          fi
+
+          # Emit the version_id output before the promote step so the notify
+          # job can report which version got uploaded even if promotion fails.
+          echo "version_id=$VERSION_ID" >> "$GITHUB_OUTPUT"
+
+          echo "✅ Found Version ID: $VERSION_ID"
+
+          # --- 4. PROMOTE ---
+          echo "🚢 Promoting to live..."
+          node ./node_modules/wrangler/bin/wrangler.js versions deploy "$VERSION_ID" \
+            --message "$DEPLOY_MSG" \
+            --yes
+
+  notify:
+    name: Notify Discord
+    needs: deploy
+    # Run on success, failure, AND cancellation so the channel sees a signal
+    # for every deploy attempt. Skipping the notify on `skipped` would hide
+    # cases where deploy never started.
+    if: ${{ always() }}
+    uses: ./.github/workflows/notify.yaml
+    with:
+      status: ${{ needs.deploy.result }}
+      sha: ${{ github.sha }}
+      short_sha: ${{ needs.deploy.outputs.short_sha }}
+      version_id: ${{ needs.deploy.outputs.version_id }}
+      deploy_msg: ${{ needs.deploy.outputs.deploy_msg }}
+      actor: ${{ github.actor }}
+      commit_url: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+      run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    secrets:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}

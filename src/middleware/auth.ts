@@ -56,6 +56,16 @@ function timingSafeEqual(a: string, b: string): boolean {
  * - 401 `Unauthorized` when the header is missing or does not match.
  */
 export const authMiddleware = createMiddleware<{ Bindings: Bindings }>(async (c, next) => {
+	// Public liveness probe bypasses auth so monitoring tools, phone browsers,
+	// and status pages reach /healthcheck without the relay key. The route was
+	// already registered before this middleware in index.ts, but `app.use('*')`
+	// still attaches to it under the deployed Workers runtime (vitest-pool-workers
+	// reports 200, but deployed traffic returns 401). Explicit guard here makes
+	// the documented behavior actually hold in production.
+	if (c.req.path === '/healthcheck') {
+		return await next();
+	}
+
 	if (!c.env.AUTH_KEY) {
 		console.error('FATAL: AUTH_KEY binding is not configured');
 		return c.json({ error: 'Service misconfigured' }, 503);

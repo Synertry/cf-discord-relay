@@ -53,7 +53,13 @@ on:
     secrets:
       DISCORD_WEBHOOK_URL:
         required: true
-        description: 'Discord webhook URL receiving the embed'
+        description: 'Direct Discord webhook URL. Used as the fallback if relay secrets are unset or the relay call fails.'
+      AUTH_KEY:
+        required: false
+        description: 'Relay shared secret. When set together with CUSTOM_DOMAIN, the deploy embed is dogfeeded through the relay first and only falls back to the direct Discord URL on failure.'
+      CUSTOM_DOMAIN:
+        required: false
+        description: 'Relay host (e.g. relay.example.com). When set together with AUTH_KEY, dogfeeds the deploy embed through the relay.'
 
 jobs:
   discord:
@@ -72,6 +78,8 @@ jobs:
           COMMIT_URL: ${{ inputs.commit_url }}
           RUN_URL: ${{ inputs.run_url }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          AUTH_KEY: ${{ secrets.AUTH_KEY }}
+          CUSTOM_DOMAIN: ${{ secrets.CUSTOM_DOMAIN }}
         run: |
           set -euo pipefail
 
@@ -166,9 +174,34 @@ jobs:
               }]
             }' > payload.json
 
-          # Fail the notify job if Discord rejects the webhook (4xx/5xx), so
-          # observability gaps surface in the Actions UI instead of silently
-          # going missing.
+          # Dogfeed path: try the relay first when AUTH_KEY + CUSTOM_DOMAIN are
+          # configured. Relay URLs contain the webhook token in the path, so we
+          # capture status only and never echo URL / response body to keep logs
+          # clean.
+          if [ -n "${AUTH_KEY:-}" ] && [ -n "${CUSTOM_DOMAIN:-}" ]; then
+            # Discord URL shape: https://discord.com/api/webhooks/{id}/{token}.
+            # Strip the host prefix to get the relay-equivalent path.
+            WEBHOOK_PATH="${DISCORD_WEBHOOK_URL#*api/}"
+            RELAY_URL="https://${CUSTOM_DOMAIN}/${WEBHOOK_PATH}"
+
+            HTTP_STATUS=$(curl --silent --max-time 15 \
+                              -o /dev/null -w '%{http_code}' \
+                              -H "Content-Type: application/json" \
+                              -H "x-auth-key: ${AUTH_KEY}" \
+                              -d @payload.json \
+                              "${RELAY_URL}")
+
+            if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+              echo "Posted via cf-discord-relay (HTTP ${HTTP_STATUS})."
+              exit 0
+            fi
+
+            echo "Relay returned HTTP ${HTTP_STATUS}; falling back to direct Discord webhook."
+          fi
+
+          # Fallback: post straight to Discord. Fail the notify job if Discord
+          # rejects the webhook (4xx/5xx) so observability gaps surface in the
+          # Actions UI instead of silently going missing.
           curl --fail-with-body --show-error --silent \
                -H "Content-Type: application/json" \
                -d @payload.json \

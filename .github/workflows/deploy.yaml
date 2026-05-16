@@ -182,3 +182,5 @@ jobs:
       run_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     secrets:
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      AUTH_KEY: ${{ secrets.AUTH_KEY }}
+      CUSTOM_DOMAIN: ${{ secrets.CUSTOM_DOMAIN }}

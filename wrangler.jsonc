@@ -1,0 +1,44 @@
+/*
+ *               cf-discord-relay
+ *     Copyright (c) Synertry 2026.
+ * Distributed under the Boost Software License, Version 1.0.
+ *     (See accompanying file LICENSE or copy at
+ *           https://www.boost.org/LICENSE_1_0.txt)
+ */
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "cf-discord-relay",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-05-16",
+	"routes": [
+		{
+			"pattern": "__CUSTOM_DOMAIN__",
+			"custom_domain": true
+		}
+	],
+	"define": {
+		"BUILD_HASH": "'__BUILD_HASH__'",
+		"BUILD_TIMESTAMP": "'__BUILD_TIMESTAMP__'"
+	},
+	"observability": {
+		"enabled": false,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"persist": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": true,
+			"persist": true,
+			"head_sampling_rate": 1
+		}
+	},
+	"send_metrics": false,
+	"compatibility_flags": ["nodejs_compat"]
+}

@@ -1,0 +1,42 @@
+{
+	"name": "cf-discord-relay",
+	"version": "0.0.1",
+	"type": "module",
+	"description": "Minimal authenticated Discord API relay deployed as a Cloudflare Worker",
+	"author": "Synertry <60792595+Synertry@users.noreply.github.com>",
+	"license": "BSL-1.0",
+	"private": true,
+	"homepage": "https://github.com/Synertry/cf-discord-relay",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Synertry/cf-discord-relay.git"
+	},
+	"bugs": {
+		"url": "https://github.com/Synertry/cf-discord-relay/issues"
+	},
+	"keywords": [
+		"discord",
+		"webhook",
+		"relay",
+		"cloudflare-workers",
+		"hono",
+		"google-apps-script"
+	],
+	"scripts": {
+		"lint": "tsc --noEmit",
+		"test": "vitest --run",
+		"dev": "wrangler dev",
+		"cf-typegen": "wrangler types --env-interface CloudflareBindings",
+		"sync-labels": "bun .github/scripts/sync-labels.ts"
+	},
+	"dependencies": {
+		"hono": "^4.12.18"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "^0.16.5",
+		"@types/node": "^25.8.0",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.6",
+		"wrangler": "^4.91.0"
+	}
+}

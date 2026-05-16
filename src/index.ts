@@ -106,9 +106,15 @@ export function createApp(mockFetch?: typeof fetch) {
 	 * breaks Google Apps Script's UrlFetchApp.getContentText() + JSON.parse(). */
 	app.notFound((c) => c.json({ error: 'Not Found' }, 404));
 
-	/** Global error handler - logs full error internally, returns generic message to client. */
+	/** Global error handler - logs full error with request context, returns generic message to client. */
 	app.onError((err, c) => {
-		console.error('HONO ERROR:', err);
+		console.error('HONO ERROR:', {
+			method: c.req.method,
+			path: c.req.path,
+			name: err.name,
+			message: err.message,
+			stack: err.stack,
+		});
 		return c.json({ error: 'Internal Server Error' }, 500);
 	});
 

@@ -33,6 +33,8 @@
 
 		/* Enable all strict type-checking options. */
 		"strict": true,
+		/* Treat indexed access as possibly undefined; catches segments[i] bugs the loop bound silently masks. */
+		"noUncheckedIndexedAccess": true,
 
 		/* Skip type checking all .d.ts files. */
 		"skipLibCheck": true,

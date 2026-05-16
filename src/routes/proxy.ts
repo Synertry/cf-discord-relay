@@ -55,7 +55,13 @@ proxyRoute.all('/*', async (c) => {
 		});
 
 		// Build fetch init - include body + duplex for methods that carry a payload.
-		const safeInit: SafeInit = { method, headers: cleanHeaders };
+		// 60s timeout matches Discord's documented gateway timeout and Google Apps
+		// Script's UrlFetchApp ceiling, so callers do not outlast the upstream call.
+		const safeInit: SafeInit = {
+			method,
+			headers: cleanHeaders,
+			signal: AbortSignal.timeout(60_000),
+		};
 		if (method !== 'GET' && method !== 'HEAD') {
 			safeInit.body = c.req.raw.body;
 			safeInit.duplex = 'half'; // Required for streaming request bodies in Workers.
@@ -64,7 +70,14 @@ proxyRoute.all('/*', async (c) => {
 		const fetcher = c.var.proxyFetch ?? fetch;
 		return await fetcher(discordUrl, safeInit as RequestInit);
 	} catch (err: unknown) {
-		console.error('PROXY ERR:', err);
-		return c.json({ error: 'Proxy error' }, 500);
+		const errName = err instanceof Error ? err.name : 'UnknownError';
+		const errMsg = err instanceof Error ? err.message : String(err);
+		console.error(`PROXY ERR ${method} ${discordUrl} [${errName}]: ${errMsg}`);
+
+		// AbortSignal.timeout() aborts with TimeoutError; client disconnect surfaces as AbortError.
+		if (errName === 'TimeoutError' || errName === 'AbortError') {
+			return c.json({ error: 'Upstream timeout', detail: errName }, 504);
+		}
+		return c.json({ error: 'Bad gateway', detail: errName }, 502);
 	}
 });

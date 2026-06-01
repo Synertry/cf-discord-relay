@@ -22,9 +22,8 @@ jobs:
   merge:
     name: Execute Fast-Forward Push
     runs-on: ubuntu-latest
-    # Short-circuit issue_comment events unless they are the `/approve` command
-    # on a PR. Other event types pass through unchanged; their step-level `if:`s
-    # decide what runs.
+    # Without this job-level gate, every comment in the repo would trigger a
+    # runner. Pass through other event types and let step-level `if:`s decide.
     if: |
       github.event_name != 'issue_comment' ||
       (github.event.issue.pull_request != null && startsWith(github.event.comment.body, '/approve'))
@@ -57,8 +56,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMENT_USER: ${{ github.event.comment.user.login }}
         run: |
-          # Gate the command on the commenter's repo role. Triage is insufficient;
-          # only write/maintain/admin can trigger the fast-forward. Errors (e.g.,
+          # Gate the command on the commenter's repo role. Triage is insufficient,
+          # only write/maintain/admin can trigger the fast-forward. Errors (e.g.
           # commenter is not a collaborator at all) fall back to "none" so the gate
           # fails closed.
           PERMISSION=$(gh api "repos/${{ github.repository }}/collaborators/$COMMENT_USER/permission" --jq '.permission' 2>/dev/null || echo "none")
@@ -119,7 +118,7 @@ jobs:
         with:
           # A full clone is required to ensure the local runner has the correct references to push
           fetch-depth: 0
-          token: ${{ secrets.PAT }}  # PAT required — GITHUB_TOKEN pushes don't trigger workflows
+          token: ${{ secrets.PAT }}  # PAT required, GITHUB_TOKEN pushes don't trigger workflows
 
       - name: Fast-forward production branch
         if: steps.validate.outputs.validated_sha != ''

@@ -17,6 +17,8 @@ The fix is to put a known-good origin between the caller and Discord. `cf-discor
 
 ## Quick start
 
+> **First-time operator?** See [`docs/DEPLOY.md`](./docs/DEPLOY.md) for the full step-by-step walkthrough (Cloudflare prerequisites, label sync, GitHub PAT, branch protection, troubleshooting). The recap below is the experienced-operator version.
+
 You need [Bun](https://bun.sh) installed, a Cloudflare account, and a domain delegated to Cloudflare DNS for the relay.
 
 1. Fork this repo.

@@ -30,10 +30,10 @@
 		"sync-labels": "bun .github/scripts/sync-labels.ts"
 	},
 	"dependencies": {
-		"hono": "^4.13.1"
+		"hono": "^4.13.2"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.21.0",
+		"@cloudflare/vitest-pool-workers": "^0.21.3",
 		"@types/node": "^26.2.0",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.10",

@@ -255,12 +255,25 @@ jobs:
             WEBHOOK_PATH="${DISCORD_WEBHOOK_URL#*api/}"
             RELAY_URL="https://${CUSTOM_DOMAIN}/${WEBHOOK_PATH}"
 
-            HTTP_STATUS=$(curl --silent --max-time 15 \
+            # curl's own -w '%{http_code}' already prints "000" on a transport
+            # failure (connection refused, DNS failure, --max-time exceeded), so
+            # a naive `HTTP_STATUS=$(curl ... || echo "000")` double-emits into
+            # "000000" when both fire. Use an if/else on the assignment itself:
+            # under `set -e`, `if VAR=$(cmd); then` does not abort on a nonzero
+            # `cmd`, and the `else` branch cleanly overwrites whatever partial
+            # output curl may have flushed with a single canonical "000", so a
+            # relay outage falls through to the direct-webhook fallback below
+            # instead of aborting the whole notify step.
+            if HTTP_STATUS=$(curl --silent --max-time 15 \
                               -o /dev/null -w '%{http_code}' \
                               -H "Content-Type: application/json" \
                               -H "x-auth-key: ${AUTH_KEY}" \
                               -d @payload.json \
-                              "${RELAY_URL}")
+                              "${RELAY_URL}"); then
+              :
+            else
+              HTTP_STATUS="000"
+            fi
 
             if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
               echo "Posted via cf-discord-relay (HTTP ${HTTP_STATUS})."

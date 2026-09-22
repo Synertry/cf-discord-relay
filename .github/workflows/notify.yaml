@@ -149,24 +149,26 @@ jobs:
              && [ -n "$SHA" ] && [ "$BASE_SHA" != "$SHA" ]; then
             COMPARE_JSON=$(gh api "repos/${REPO_FULL}/compare/${BASE_SHA}...${SHA}" 2>/dev/null || true)
             if [ -n "$COMPARE_JSON" ]; then
-              # For each commit: take the title (first line), strip square
-              # brackets so they cannot break the markdown link, and link the
-              # title to its PR. The PR number is the LAST "#N" in the title,
-              # which is the squash-merge "(#90)" suffix or a merge commit's
-              # "#65"; commits with no "#N" link to the commit itself. The
-              # "[][]" character class matches "[" and "]" without backslash
-              # escaping, keeping the program robust across shell layers.
+              # For each commit: render the title (first line) as plain text and
+              # append only the PR number as a single linked "(#N)", never the
+              # whole title. The PR number is the LAST "#N" in the title (the
+              # squash-merge "(#90)" suffix). That trailing "(#N)" is stripped
+              # from the display title so it is not shown twice. Commits with no
+              # PR ref get a short-SHA link instead. Square brackets are stripped
+              # and the parens matched via "[(]"/"[)]" character classes so no
+              # backslash escape can be mangled across shell layers.
               CHANGELOG=$(printf '%s' "$COMPARE_JSON" | jq -r --arg repo_url "$REPO_URL" '
                 (.commits // [])
                 | reverse
                 | .[0:20]
                 | map(
-                    ((.commit.message | split("\n")[0]) | gsub("[][]"; "")) as $title
-                    | ([ $title | scan("#([0-9]+)") ] | (.[-1][0] // null)) as $pr
-                    | "- " + (
+                    ((.commit.message | split("\n")[0]) | gsub("[][]"; "")) as $raw
+                    | ([ $raw | scan("#([0-9]+)") ] | (.[-1][0] // null)) as $pr
+                    | ($raw | sub(" *[(]#[0-9]+[)] *$"; "")) as $title
+                    | "- " + $title + (
                         if $pr != null
-                        then "[\($title)](\($repo_url)/pull/\($pr))"
-                        else "[\($title)](\(.html_url))"
+                        then " ([#\($pr)](\($repo_url)/pull/\($pr)))"
+                        else " ([\(.sha[0:7])](\(.html_url)))"
                         end
                       )
                   )
@@ -253,12 +255,25 @@ jobs:
             WEBHOOK_PATH="${DISCORD_WEBHOOK_URL#*api/}"
             RELAY_URL="https://${CUSTOM_DOMAIN}/${WEBHOOK_PATH}"
 
-            HTTP_STATUS=$(curl --silent --max-time 15 \
+            # curl's own -w '%{http_code}' already prints "000" on a transport
+            # failure (connection refused, DNS failure, --max-time exceeded), so
+            # a naive `HTTP_STATUS=$(curl ... || echo "000")` double-emits into
+            # "000000" when both fire. Use an if/else on the assignment itself:
+            # under `set -e`, `if VAR=$(cmd); then` does not abort on a nonzero
+            # `cmd`, and the `else` branch cleanly overwrites whatever partial
+            # output curl may have flushed with a single canonical "000", so a
+            # relay outage falls through to the direct-webhook fallback below
+            # instead of aborting the whole notify step.
+            if HTTP_STATUS=$(curl --silent --max-time 15 \
                               -o /dev/null -w '%{http_code}' \
                               -H "Content-Type: application/json" \
                               -H "x-auth-key: ${AUTH_KEY}" \
                               -d @payload.json \
-                              "${RELAY_URL}")
+                              "${RELAY_URL}"); then
+              :
+            else
+              HTTP_STATUS="000"
+            fi
 
             if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
               echo "Posted via cf-discord-relay (HTTP ${HTTP_STATUS})."

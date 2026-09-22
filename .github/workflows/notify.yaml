@@ -255,15 +255,8 @@ jobs:
             WEBHOOK_PATH="${DISCORD_WEBHOOK_URL#*api/}"
             RELAY_URL="https://${CUSTOM_DOMAIN}/${WEBHOOK_PATH}"
 
-            # curl's own -w '%{http_code}' already prints "000" on a transport
-            # failure (connection refused, DNS failure, --max-time exceeded), so
-            # a naive `HTTP_STATUS=$(curl ... || echo "000")` double-emits into
-            # "000000" when both fire. Use an if/else on the assignment itself:
-            # under `set -e`, `if VAR=$(cmd); then` does not abort on a nonzero
-            # `cmd`, and the `else` branch cleanly overwrites whatever partial
-            # output curl may have flushed with a single canonical "000", so a
-            # relay outage falls through to the direct-webhook fallback below
-            # instead of aborting the whole notify step.
+            # Avoid `|| echo "000"`: curl's own -w already prints "000" on a
+            # transport failure, so that pattern doubles up under set -e.
             if HTTP_STATUS=$(curl --silent --max-time 15 \
                               -o /dev/null -w '%{http_code}' \
                               -H "Content-Type: application/json" \

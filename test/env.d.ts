@@ -8,12 +8,12 @@
 
 /**
  * @module test/env
- * Type augmentation for the `cloudflare:test` module used by `@cloudflare/vitest-pool-workers`.
- * Maps the test environment interface to the worker's bindings so that `env` is
- * correctly typed within Vitest test files.
+ * Adds the `AUTH_KEY` secret to `Cloudflare.Env`, the type `@cloudflare/vitest-plugin`
+ * gives `env` from `cloudflare:test`. `wrangler types` leaves the secret out because it
+ * is set in the Cloudflare dashboard, not in `wrangler.jsonc`.
  */
-declare module 'cloudflare:test' {
-	interface ProvidedEnv {
+declare namespace Cloudflare {
+	interface Env {
 		AUTH_KEY: string;
 	}
 }

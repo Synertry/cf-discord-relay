@@ -13,7 +13,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "cf-discord-relay",
 	"main": "src/index.ts",
-	"compatibility_date": "2026-05-16",
+	"compatibility_date": "2026-11-04",
 	"routes": [
 		{
 			"pattern": "__CUSTOM_DOMAIN__",

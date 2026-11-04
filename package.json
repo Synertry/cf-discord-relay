@@ -33,10 +33,10 @@
 		"hono": "^4.13.14"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.23.0",
+		"@cloudflare/vitest-plugin": "^1.4.11",
 		"@types/node": "^26.6.6",
 		"typescript": "^7.0.2",
-		"vitest": "^4.1.11",
+		"vitest": "^5.0.5",
 		"wrangler": "^4.154.0"
 	}
 }

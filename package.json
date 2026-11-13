@@ -33,7 +33,7 @@
 		"hono": "^4.13.17"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-plugin": "^1.6.0",
+		"@cloudflare/vitest-plugin": "^1.6.1",
 		"@types/node": "^26.6.6",
 		"typescript": "^7.0.2",
 		"vitest": "^5.0.5",

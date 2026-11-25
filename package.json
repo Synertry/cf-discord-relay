@@ -30,7 +30,7 @@
 		"sync-labels": "bun .github/scripts/sync-labels.ts"
 	},
 	"dependencies": {
-		"hono": "^4.13.19"
+		"hono": "^4.13.20"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-plugin": "^1.8.5",
